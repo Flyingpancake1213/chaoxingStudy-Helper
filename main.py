@@ -1,6 +1,6 @@
 import json
 import time
-import os  # 导入 os 模块以处理文件和目录操作
+import os
 
 import dashscope
 from selenium import webdriver
@@ -55,9 +55,9 @@ if not os.path.exists('result'):
     os.makedirs('result')
 
 def ollama(text):
-    url = "http://localhost:11434/api/generate"
+    url = "http://10.4.240.253:11434/api/generate"
     data = {
-        "model": "gemma2:27b",
+        "model": "qwen2:latest",
         "prompt": f"这是题目：{text} 直接返回给我答案的对应选项 不要描述其他的",
         "stream": False
     }
@@ -176,15 +176,15 @@ def extract_question_and_options():
 
             print("AI参考答案：" + ans)
 
-            if '对' in ans or 'A' in ans:
+            if '对' in ans or 'A' in ans or 'T' in ans:
                 A = browser.find_element(By.XPATH, "//span[text()='A']")
                 A.click()
 
-            if '错' in ans or 'B' in ans:
+            if '错' in ans or 'B' in ans or 'F' in ans:
                 B = browser.find_element(By.XPATH, "//span[text()='B']")
                 B.click()
 
-            if '对' not in ans and '错' not in ans and 'A' not in ans and 'B' not in ans :
+            if '对' not in ans and '错' not in ans and 'A' not in ans and 'B' not in ans and 'F' not in ans and 'T' not in ans:
                 print("答案获取失败")
                 extract_question_and_options()
 
