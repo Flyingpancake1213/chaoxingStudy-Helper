@@ -1,41 +1,65 @@
+import argparse
 import json
+import sys
 import time
 import os
 
 import dashscope
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
-# from pyquery import PyQuery as pq
 from selenium.common.exceptions import NoSuchElementException
-from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service as ChromeService
 import requests
 
+sys.stdout.reconfigure(encoding='gbk', line_buffering=True)
 current_directory = os.path.dirname(os.path.abspath(__file__))
 
-opt = Options()
-opt.binary_location = rf'{current_directory}\Chrome\chrome.exe'
-opt.add_argument('--no-sandbox')
-opt.add_experimental_option('detach', True)
-ser = Service()
-ser.executable_path = rf'{current_directory}\Chrome\chromedriver.exe'
+# opt = Options()
+# # opt.binary_location = rf'{current_directory}\Chrome\chrome.exe'
+# opt.binary_location=r"..\chromedriver\chrome.exe"
+# opt.add_argument('--no-sandbox')
+# opt.add_experimental_option('detach', True)
+# ser = Service()
+# # ser.executable_path = rf'{current_directory}\Chrome\chromedriver.exe'
+# ser.executable_path = rf'..\chromedriver\chromedriver.exe'
+arg = sys.argv
+if len(arg) < 2:
+    username = input('请输入超星账号:')
+    password = input('请输入超星密码:')
+    url = input('请输入进入考试页面后的网址:')
+    model = input("答案获取方式：1.本地ollama 2.通义千问（自行配置API）")
 
-username = input('请输入超星账号:')
-password = input('请输入超星密码:')
-url = input('请输入进入考试页面后的网址:')
-model = input("答案获取方式：1.本地ollama 2.通义千问（自行配置API）")
-
-modelAi = ""
-if model == "1":
-    modelAi = "ollama"
-elif model == "2":
-    tongyiApi = input("请输入通义千问api token：")
-    modelAi = "tongyi"
+    modelAi = ""
+    if model == "1":
+        modelAi = "ollama"
+    elif model == "2":
+        tongyiApi = input("请输入通义千问api token：")
+        modelAi = "tongyi"
+    else:
+        print("输入有误")
+        sys.exit(0)
 else:
-    print("输入有误")
-    exit(0)
+    parser = argparse.ArgumentParser()
 
-browser = webdriver.Chrome(service=ser,options=opt)
+    parser.add_argument('--username')
+    parser.add_argument('--password')
+    parser.add_argument('--url')
+    parser.add_argument('--api')
+
+    args = parser.parse_args()
+
+    username = args.username
+    password = args.password
+    url = args.url
+    modelAi = "tongyi"
+    tongyiApi = args.api
+
+
+options = webdriver.ChromeOptions()
+options.binary_location=r"chromedriver\chrome.exe"
+options.add_argument('--no-sandbox')
+options.add_experimental_option('detach', True)
+browser = webdriver.Chrome(service=ChromeService(executable_path="chromedriver\chromedriver.exe"),options=options)
 browser.maximize_window()
 
 browser.get(url)
@@ -123,7 +147,7 @@ def extract_question_and_options():
             time.sleep(1)
             status = click_next_button()
             if status == False:
-                exit(0)
+                sys.exit(0)
         elif "多选" in num_ele.text:
             options = browser.find_elements(By.XPATH, "//div[@class='clearfix answerBg']")
             choose = ""
@@ -164,7 +188,7 @@ def extract_question_and_options():
             time.sleep(1)
             status = click_next_button()
             if status == False:
-                exit(0)
+                sys.exit(0)
         elif "判断" in num_ele.text:
             que = f"{num_ele.text}"
             print(que)
@@ -191,12 +215,12 @@ def extract_question_and_options():
             time.sleep(1)
             status = click_next_button()
             if status == False:
-                exit(0)
+                sys.exit(0)
         else:
             print("暂不支持填空")
             status = click_next_button()
             if status == False:
-                exit(0)
+                sys.exit(0)
 
 def click_next_button():
     try:
