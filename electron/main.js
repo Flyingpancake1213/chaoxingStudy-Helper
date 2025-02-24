@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu , ipcMain } = require('electron');
+const { app, BrowserWindow, Menu , ipcMain, shell } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const iconv = require('iconv-lite');
@@ -23,6 +23,32 @@ function createWindow() {
     }
     // win.loadFile(path.join(__dirname, '../dist-web/index.html'));
     // win.webContents.openDevTools();
+
+    win.webContents.on('context-menu', (event, params) => {
+        const selectEnabled = !!params.selectionText.trim().length
+        const template = []
+        if (params.isEditable) {
+            template.unshift(...[{
+                label: '粘贴',
+                role: 'paste'
+            }])
+        }
+        if (selectEnabled) {
+            template.unshift(...[{
+                label: '复制',
+                role: 'copy',
+                visible: () => !selectEnabled
+            },
+                {
+                    label: '剪切',
+                    role: 'cut'
+                }])
+        }
+        if (template.length) {
+            const RightMenu = Menu.buildFromTemplate(template)
+            RightMenu.popup()
+        }
+    });
 }
 
 app.whenReady().then(() =>{
@@ -59,4 +85,8 @@ ipcMain.on('run-cmd', (event, command) => {
     cmdProcess.on('close', (code) => {
         event.reply('cmd-output', `命令执行完毕，退出码：${code}`);
     });
+});
+
+ipcMain.on("start-ie",(event,url) => {
+    shell.openExternal(url);
 });
