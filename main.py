@@ -11,7 +11,7 @@ from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.chrome.service import Service as ChromeService
 import requests
 
-sys.stdout.reconfigure(encoding='gbk', line_buffering=True)
+sys.stdout.reconfigure(encoding='gbk', line_buffering=True,errors='ignore')
 current_directory = os.path.dirname(os.path.abspath(__file__))
 
 # opt = Options()
