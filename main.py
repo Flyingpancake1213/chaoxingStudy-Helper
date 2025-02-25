@@ -22,6 +22,7 @@ current_directory = os.path.dirname(os.path.abspath(__file__))
 # ser = Service()
 # # ser.executable_path = rf'{current_directory}\Chrome\chromedriver.exe'
 # ser.executable_path = rf'..\chromedriver\chromedriver.exe'
+
 arg = sys.argv
 if len(arg) < 2:
     username = input('请输入超星账号:')
@@ -94,6 +95,16 @@ def ollama(text):
 def tongyi(text):
     dashscope.api_key = tongyiApi
     text = f"这是题目：{text} 直接返回给我答案的对应字母 不要描述其他的"
+    messages = [{'role': 'user', 'content': text}]
+    response = dashscope.Generation.call(dashscope.Generation.Models.qwen_max, messages=messages,
+                                         result_format='message')
+    content = response['output']['choices'][0]['message']['content']
+
+    return content
+
+def ty_tiankong(text,num):
+    dashscope.api_key = tongyiApi
+    text = f"这是一道填空题,{text},请你进行回答,问题里的$填空内容就是需要回答的地方,一共有{num}个空,请你直接告诉我答案 不要描述其他的 每个答案用换行分隔 返回答案的数量要跟我发的一模一样"
     messages = [{'role': 'user', 'content': text}]
     response = dashscope.Generation.call(dashscope.Generation.Models.qwen_max, messages=messages,
                                          result_format='message')
@@ -216,6 +227,38 @@ def extract_question_and_options():
             status = click_next_button()
             if status == False:
                 sys.exit(0)
+        elif "填空" in num_ele.text:
+            kong = browser.find_elements(By.XPATH,"//div[@class='stem_answer']/div[@class='Answer']")
+            kong_num = len(kong)
+            que = f"{num_ele.text}"
+            print(que)
+            if (modelAi == "ollama"):
+                print("暂不支持ollama填空")
+                status = click_next_button()
+                if status == False:
+                    sys.exit(0)
+            else:
+                ans = ty_tiankong(que, kong_num)
+            print("AI参考答案" + ans)
+            ans_list = ans.split("\n")
+            j = 0
+            for i in kong:
+                input_bar = i.find_element(By.XPATH, ".//iframe")
+                # WebDriverWait(browser, 10).until(EC.frame_to_be_available_and_switch_to_it(input_bar))
+                # input_element = WebDriverWait(browser, 10).until(EC.presence_of_element_located((By.TAG_NAME, "input")))
+                input_bar.click()
+                input_bar.send_keys(ans_list[j])
+                input_bar.click()
+                j = j + 1
+                # browser.switch_to.default_content()
+
+            # sys.exit(0)
+
+            time.sleep(2)
+            status = click_next_button()
+            if status == False:
+                sys.exit(0)
+
         else:
             print("暂不支持填空")
             status = click_next_button()
