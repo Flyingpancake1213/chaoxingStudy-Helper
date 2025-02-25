@@ -22,7 +22,7 @@
 
  ![screenshot](screenshot.png)
 
-注意：程序默认使用通义千问AI模型，您需要自行申请API密钥。申请地址：[通义千问API](https://example.com) 🔑
+注意：程序默认使用通义千问AI模型，您需要自行申请API密钥。申请地址：[通义千问API](https://bailian.console.aliyun.com/?apiKey=1) 🔑
 
 ## 手动运行并调用Ollama 🛠️
 
@@ -44,7 +44,7 @@
 
 6. 选择AI作答来源：Ollama 或 通义千问。
 
-   - 通义千问Token获取：[通义千问API](https://example.com) 🔑
+   - 通义千问Token获取：[通义千问API](https://bailian.console.aliyun.com/?apiKey=1) 🔑
    - Ollama对接：请自行修改代码第58至66行。💻
 
 ## 注意事项 📌
@@ -52,12 +52,11 @@
 - 目前本项目仅支持单选题、多选题和判断题的自动作答。✅
 - 使用前请确保已正确配置AI模型和相关依赖。🔧
 
-## 版本 1.0.3 - 新增填空题支持与阿里云DeepSeek接入 🆕
+## 版本 1.0.4 - 新增填空题支持 🆕
 
 ### 更新内容 📅
 
 - **新增填空题支持**：现在程序已支持自动作答填空题，进一步提升了考试辅助的全面性。📝
-- **接入阿里云DeepSeek**：引入阿里云DeepSeek AI模型，填空题自动作答功能将默认使用此模型，且无需用户申请额外的API密钥。🔑
 
 ## 贡献与反馈 🤝
 
