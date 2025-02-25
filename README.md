@@ -20,7 +20,8 @@
 
 ### 程序截图
 
-（此处插入截图）
+ ![screenshot](screenshot.png)
+
 
 注意：程序默认使用通义千问AI模型，您需要自行申请API密钥。申请地址：[通义千问API](https://example.com) 🔑
 
