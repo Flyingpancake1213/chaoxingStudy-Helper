@@ -12,7 +12,7 @@ from selenium.webdriver.chrome.service import Service as ChromeService
 import requests
 
 sys.stdout.reconfigure(encoding='gbk', line_buffering=True,errors='ignore')
-current_directory = os.path.dirname(os.path.abspath(__file__))
+# current_directory = os.path.dirname(os.path.abspath(__file__))
 
 # opt = Options()
 # # opt.binary_location = rf'{current_directory}\Chrome\chrome.exe'
@@ -110,6 +110,39 @@ def ty_tiankong(text,num):
                                          result_format='message')
     content = response['output']['choices'][0]['message']['content']
 
+    return content
+
+def ty_tiankong_img(text,num,img):
+    i = 0
+
+    while True:
+        text1 = f"这是一道填空题,{text},相关图片信息我已提交,请你进行回答里面的问题,一共有{num}个空,请你直接告诉我答案 不要描述其他的 任何一个空的答案都全部用换行分隔 返回答案的数量要跟我发的一模一样,不要描述其他的"
+        print("AI图片处理中，请稍后...")
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"image": img},
+                    {"text": text1}
+                ]
+            }
+        ]
+        response = dashscope.MultiModalConversation.call(
+            api_key=tongyiApi,
+            model='qwen-vl-max-latest',
+            messages=messages
+        )
+
+        if i > 3:
+            print("请求失败次数过多，跳过")
+            return "error"
+
+        if response["status_code"] == 200:
+            break
+        else:
+            print("请求失败，正在重试...")
+            i += 1
+    content = response['output']['choices'][0]['message']['content'][0]['text']
     return content
 
 def extract_question_and_options():
@@ -231,26 +264,89 @@ def extract_question_and_options():
             kong = browser.find_elements(By.XPATH,"//div[@class='stem_answer']/div[@class='Answer']")
             kong_num = len(kong)
             que = f"{num_ele.text}"
+
+            image = False
             print(que)
+
+            try:
+                img = num_ele.find_element(By.XPATH, ".//img")
+                print("获取到题目图片，正在处理...")
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+                }
+                img_url = img.get_attribute("src")
+                # print(f"图片的 URL 是: {img_src}")
+                if img_url:  # 确保 URL 不为空
+                    # 下载图片
+                    response = requests.get(img_url, stream=True, headers=headers)
+                    if response.status_code == 200:
+                        img_name = img_url.split("/")[-1]
+                        img_path = os.path.join(".", img_name)
+                        with open(img_path, "wb") as file:
+                            for chunk in response.iter_content(1024):
+                                file.write(chunk)
+                        print(f"图片已获取成功，正在转直链...")
+                        # image = True
+                    else:
+                        print(f"无法加载图片: {img_url}")
+                else:
+                    print("未找到图片 URL")
+                url = "https://image.myxuebi.top/api/v1/upload"
+                file = open(img_name, "rb")
+                files = {
+                    "file": file  # 以二进制模式打开文件
+                }
+
+                response = requests.post(url, files=files)
+                if response.status_code == 200:
+                    res = json.loads(response.text)
+                    url_img = res["data"]["links"]["url"]
+                    # print(url)
+                    # print("图片加载成功！")
+                    image = True
+                else:
+                    print("提交失败，网络错误！")
+            except NoSuchElementException:
+                pass
+            # img_url = img.get_attribute("src")
+
             if (modelAi == "ollama"):
                 print("暂不支持ollama填空")
                 status = click_next_button()
                 if status == False:
                     sys.exit(0)
             else:
-                ans = ty_tiankong(que, kong_num)
-            print("AI参考答案" + ans)
+                if image == True:
+                    print("图片已成功生成直链：" + url_img)
+                    file.close()
+                    os.remove(img_name)
+                    ans = ty_tiankong_img(que, kong_num, url_img)
+                    if ans == "error":
+                        status = click_next_button()
+                        if status == False:
+                            sys.exit(0)
+                else:
+                    ans = ty_tiankong(que, kong_num)
             ans_list = ans.split("\n")
-            j = 0
-            for i in kong:
-                input_bar = i.find_element(By.XPATH, ".//iframe")
-                # WebDriverWait(browser, 10).until(EC.frame_to_be_available_and_switch_to_it(input_bar))
-                # input_element = WebDriverWait(browser, 10).until(EC.presence_of_element_located((By.TAG_NAME, "input")))
-                input_bar.click()
-                input_bar.send_keys(ans_list[j])
-                input_bar.click()
-                j = j + 1
-                # browser.switch_to.default_content()
+            ans_list = list(filter(None,ans_list))
+            print("AI参考答案：" + str(ans_list))
+
+            if len(ans_list) == kong_num:
+                j = 0
+                for i in kong:
+                    input_bar = i.find_element(By.XPATH, ".//iframe")
+                    # WebDriverWait(browser, 10).until(EC.frame_to_be_available_and_switch_to_it(input_bar))
+                    # input_element = WebDriverWait(browser, 10).until(EC.presence_of_element_located((By.TAG_NAME, "input")))
+                    input_bar.click()
+                    input_bar.send_keys(ans_list[j])
+                    input_bar.click()
+                    j = j + 1
+                    # browser.switch_to.default_content()
+            else:
+                print("错误：AI答案与实际空不符，跳过此题")
+                status = click_next_button()
+                if status == False:
+                    sys.exit(0)
 
             # sys.exit(0)
 
@@ -271,7 +367,10 @@ def click_next_button():
         next_button.click()
     except NoSuchElementException:
         print("没有找到“下一题”按钮，可能是已经到达最后一题。")
-        print("题目填写已结束，请自行检查是否有遗漏，本程序不支持填空等题目，请手动填写")
+        print("题目填写已结束，请自行检查是否有遗漏，本程序不支持部分解答题等题目，请手动填写")
+        print("填空题可能会有错误，请手动核查！")
+        print("程序已退出，driver已关闭，请答题完成后手动关闭浏览器")
+        os.system('taskkill /im chromedriver.exe /F')
         return False
     except Exception as e:
         print(f"点击下一题按钮失败: {e}")
