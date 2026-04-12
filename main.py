@@ -10,8 +10,8 @@ from selenium.webdriver.common.by import By
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.chrome.service import Service as ChromeService
 import requests
-
 sys.stdout.reconfigure(encoding='gbk', line_buffering=True,errors='ignore')
+print("浏览器启动中...")
 # current_directory = os.path.dirname(os.path.abspath(__file__))
 
 # opt = Options()
@@ -22,7 +22,7 @@ sys.stdout.reconfigure(encoding='gbk', line_buffering=True,errors='ignore')
 # ser = Service()
 # # ser.executable_path = rf'{current_directory}\Chrome\chromedriver.exe'
 # ser.executable_path = rf'..\chromedriver\chromedriver.exe'
-
+homework = 'n'
 arg = sys.argv
 if len(arg) < 2:
     username = input('请输入超星账号:')
@@ -46,6 +46,7 @@ else:
     parser.add_argument('--password')
     parser.add_argument('--url')
     parser.add_argument('--api')
+    parser.add_argument('--homework')
 
     args = parser.parse_args()
 
@@ -54,6 +55,7 @@ else:
     url = args.url
     modelAi = "tongyi"
     tongyiApi = args.api
+    homework = args.homework
 
 
 options = webdriver.ChromeOptions()
@@ -382,6 +384,139 @@ def getque():
         time.sleep(0.5)
         extract_question_and_options()
 
-getque()
 
-# browser.quit()
+def extract_question_and_options_homework():
+    """
+    处理作业页面：所有题目在一页，无下一题按钮。
+    遍历每个题目，滚动到可见区域后答题。
+    """
+    # 获取所有题目容器
+    question_divs = browser.find_elements(By.XPATH,
+                                          "//div[contains(@class,'questionLi') and contains(@class,'singleQuesId')]")
+    total = len(question_divs)
+    print(f"共找到 {total} 道题目")
+
+    for idx, question_div in enumerate(question_divs, 1):
+        print(f"\n--- 正在处理第 {idx}/{total} 题 ---")
+
+        # 滚动到题目可见
+        browser.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", question_div)
+        time.sleep(0.5)  # 等待滚动完成
+
+        # 获取题型（从 div 的 typename 属性）
+        question_type = question_div.get_attribute("typename")
+
+        # 获取题干文本（包含题号和题目内容）
+        try:
+            title_element = question_div.find_element(By.XPATH, ".//h3[contains(@class,'mark_name')]")
+            full_title = title_element.text.strip()
+        except:
+            print(f"第 {idx} 题无法获取题干，跳过")
+            continue
+
+        # 获取所有选项元素（相对路径）
+        option_elements = question_div.find_elements(By.XPATH, ".//div[contains(@class,'answerBg')]")
+
+        # 构造选项文本用于 AI 请求
+        options_text = ""
+        for opt in option_elements:
+            try:
+                letter = opt.find_element(By.XPATH, ".//span[contains(@class,'num_option')]").text
+                content = opt.find_element(By.XPATH, ".//div[contains(@class,'answer_p')]").text
+                options_text += f"{letter}: {content} "
+            except:
+                continue
+
+        # 组装完整问题
+        full_question = f"{full_title} {options_text}"
+        print(f"题目类型: {question_type}")
+        print(f"题目内容: {full_question}")
+
+        # 调用 AI 获取答案
+        if modelAi == "ollama":
+            ai_answer = ollama(full_question)
+        else:
+            ai_answer = tongyi(full_question)
+
+        print(f"AI参考答案: {ai_answer}")
+
+        # 根据题型处理点击
+        if question_type == "单选题":
+            # 单选：点击对应字母的选项
+            for letter in ["A", "B", "C", "D"]:
+                if letter in ai_answer.upper():
+                    try:
+                        target_span = question_div.find_element(By.XPATH, f".//span[text()='{letter}']")
+                        target_span.click()
+                        print(f"已选择选项 {letter}")
+                        break
+                    except:
+                        continue
+            else:
+                print("未在 AI 答案中找到有效选项，跳过此题")
+
+        elif question_type == "多选题":
+            # 多选：可能包含多个字母，依次点击
+            selected = False
+            for letter in ["A", "B", "C", "D"]:
+                if letter in ai_answer.upper():
+                    try:
+                        target_span = question_div.find_element(By.XPATH, f".//span[text()='{letter}']")
+                        target_span.click()
+                        print(f"已选择选项 {letter}")
+                        selected = True
+                        time.sleep(0.2)  # 避免点击过快
+                    except:
+                        continue
+            if not selected:
+                print("未在 AI 答案中找到有效选项，跳过此题")
+
+        elif question_type == "判断题":
+            # 判断：AI可能返回“对/错”或字母，映射点击
+            # 页面选项固定为 A对 B错
+            if '对' in ai_answer or 'A' in ai_answer.upper() or 'T' in ai_answer.upper():
+                try:
+                    target_span = question_div.find_element(By.XPATH, ".//span[text()='A']")
+                    target_span.click()
+                    print("已选择 对 (A)")
+                except:
+                    pass
+            elif '错' in ai_answer or 'B' in ai_answer.upper() or 'F' in ai_answer.upper():
+                try:
+                    target_span = question_div.find_element(By.XPATH, ".//span[text()='B']")
+                    target_span.click()
+                    print("已选择 错 (B)")
+                except:
+                    pass
+            else:
+                print("判断题答案无法识别，跳过")
+
+        else:
+            print(f"暂不支持的题型: {question_type}，跳过")
+
+        time.sleep(1)  # 每题间隔
+
+    # 所有题目处理完毕，尝试提交
+    print("\n所有题目处理完毕，正在查找提交按钮...")
+    try:
+        # 常见的提交按钮可能包含“提交”、“交卷”等文字
+        submit_btn = browser.find_element(By.XPATH,
+                                          "//a[contains(text(),'提交')] | //button[contains(text(),'提交')] | //input[@value='提交']")
+        submit_btn.click()
+        print("已点击提交按钮，请检查页面确认提交。")
+    except NoSuchElementException:
+        print("未找到提交按钮，请手动提交。")
+    except Exception as e:
+        print(f"提交时出错: {e}")
+
+    # 保持浏览器不关闭，等待手动操作
+    print("答题完成，浏览器保持打开，可手动检查。")
+    sys.exit(0)
+
+if homework == 'n':
+    getque()
+else:
+    print("作业")
+    while True:
+        time.sleep(0.5)
+        extract_question_and_options_homework()
