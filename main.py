@@ -203,4 +203,288 @@ def extract_question_and_options():
 
     if "单选" in num_ele.text:
         options = browser.find_elements(By.XPATH, "//div[@class='clearfix answerBg singleoption']")
-        choose =
+        choose = ""
+        for option in options:
+            option_letter = option.find_element(By.XPATH, ".//span").text
+            option_content = option.find_element(By.XPATH, ".//div").text
+            choose += f"{option_letter}: {option_content} "
+
+        que = f"{num_ele.text} {choose}"
+        print(que)
+
+        ans = ollama(que) if modelAi == "ollama" else tongyi(que)
+        print("AI参考答案：" + ans)
+        
+        clicked = False
+        for letter in ['A', 'B', 'C', 'D']:
+            if letter in ans.upper():
+                try:
+                    browser.find_element(By.XPATH, f"//span[text()='{letter}']").click()
+                    clicked = True
+                    break # 单选只点一个
+                except:
+                    pass
+
+        if not clicked:
+            print("答案选择失败")
+
+        time.sleep(1)
+        if not click_next_button(): sys.exit(0)
+
+    elif "多选" in num_ele.text:
+        options = browser.find_elements(By.XPATH, "//div[@class='clearfix answerBg']")
+        choose = ""
+        for option in options:
+            option_letter = option.find_element(By.XPATH, ".//span").text
+            option_content = option.find_element(By.XPATH, ".//div").text
+            choose += f"{option_letter}: {option_content} "
+
+        que = f"{num_ele.text} {choose}"
+        print(que)
+
+        ans = ollama(que) if modelAi == "ollama" else tongyi(que)
+        print("AI参考答案：" + ans)
+
+        clicked = False
+        for letter in ['A', 'B', 'C', 'D', 'E', 'F']: # 多选可能选项更多
+            if letter in ans.upper():
+                try:
+                    browser.find_element(By.XPATH, f"//span[text()='{letter}']").click()
+                    clicked = True
+                    time.sleep(0.2)
+                except:
+                    pass
+
+        if not clicked:
+            print("答案选择失败")
+
+        time.sleep(1)
+        if not click_next_button(): sys.exit(0)
+
+    elif "判断" in num_ele.text:
+        que = f"{num_ele.text}"
+        print(que)
+
+        ans = ollama(que + "判断题返回对或错") if modelAi == "ollama" else tongyi(que + "判断题返回对或错")
+        print("AI参考答案：" + ans)
+
+        clicked = False
+        if '对' in ans or 'A' in ans.upper() or 'T' in ans.upper():
+            try: browser.find_element(By.XPATH, "//span[text()='A']").click(); clicked = True
+            except: pass
+        if '错' in ans or 'B' in ans.upper() or 'F' in ans.upper():
+            try: browser.find_element(By.XPATH, "//span[text()='B']").click(); clicked = True
+            except: pass
+
+        if not clicked:
+            print("答案获取或点击失败")
+
+        time.sleep(1)
+        if not click_next_button(): sys.exit(0)
+
+    elif "填空" in num_ele.text:
+        kong = browser.find_elements(By.XPATH, "//div[@class='stem_answer']/div[@class='Answer']")
+        kong_num = len(kong)
+        que = f"{num_ele.text}"
+        print(que)
+
+        img_url_myxuebi = ""
+        try:
+            img = num_ele.find_element(By.XPATH, ".//img")
+            print("获取到题目图片，正在处理...")
+            img_url_myxuebi = process_and_upload_image(img)
+        except NoSuchElementException:
+            pass
+
+        if modelAi == "ollama":
+            print("暂不支持ollama填空")
+        else:
+            if img_url_myxuebi:
+                ans = ty_tiankong_img(que, kong_num, img_url_myxuebi)
+                if ans == "error":
+                    if not click_next_button(): sys.exit(0)
+                    return
+            else:
+                ans = ty_tiankong(que, kong_num)
+            
+            # 清理答案列表，去除空白符和空行
+            ans_list = [a.strip() for a in ans.split("\n") if a.strip()]
+            print("AI参考答案：" + str(ans_list))
+
+            if len(ans_list) >= kong_num:
+                for j in range(kong_num):
+                    try:
+                        input_bar = kong[j].find_element(By.XPATH, ".//iframe | .//input")
+                        input_bar.click()
+                        input_bar.send_keys(ans_list[j])
+                    except Exception as e:
+                        print(f"第 {j+1} 空填入失败: {e}")
+            else:
+                print("错误：AI返回的答案数量与实际空数不符，请手动补充。")
+
+        time.sleep(2)
+        if not click_next_button(): sys.exit(0)
+
+    else:
+        print(f"暂不支持的题型: {num_ele.text[:5]}...")
+        if not click_next_button(): sys.exit(0)
+
+def click_next_button():
+    try:
+        next_button = browser.find_element(By.XPATH, '//a[text()="下一题"]')
+        next_button.click()
+        return True
+    except NoSuchElementException:
+        print("\n没有找到“下一题”按钮，可能是已经到达最后一题。")
+        print("题目填写已结束，请手动检查是否有遗漏！")
+        print("程序将退出，您可以手动点击提交并关闭浏览器。")
+        return False
+    except Exception as e:
+        print(f"点击下一题按钮失败: {e}")
+        return False
+
+def getque():
+    print("进入考试模式 (单题翻页)")
+    while True:
+        time.sleep(0.5)
+        extract_question_and_options()
+
+def extract_question_and_options_homework():
+    question_divs = browser.find_elements(By.XPATH, "//div[contains(@class,'questionLi') and contains(@class,'singleQuesId')]")
+    total = len(question_divs)
+    if total == 0:
+        print("未检测到作业题目，页面可能未加载完成...")
+        time.sleep(2)
+        return
+
+    print(f"共找到 {total} 道题目")
+
+    for idx, question_div in enumerate(question_divs, 1):
+        print(f"\n--- 正在处理第 {idx}/{total} 题 ---")
+        browser.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", question_div)
+        time.sleep(0.5)
+
+        question_type = question_div.get_attribute("typename")
+        if not question_type:
+             question_type = "未知类型"
+
+        try:
+            title_element = question_div.find_element(By.XPATH, ".//h3[contains(@class,'mark_name')]")
+            full_title = title_element.text.strip()
+        except:
+            print(f"第 {idx} 题无法获取题干，跳过")
+            continue
+
+        option_elements = question_div.find_elements(By.XPATH, ".//div[contains(@class,'answerBg')]")
+        options_text = ""
+        for opt in option_elements:
+            try:
+                letter = opt.find_element(By.XPATH, ".//span[contains(@class,'num_option')]").text
+                content = opt.find_element(By.XPATH, ".//div[contains(@class,'answer_p')]").text
+                options_text += f"{letter}: {content} "
+            except:
+                continue
+
+        full_question = f"{full_title} {options_text}"
+        print(f"题目类型: {question_type}")
+        print(f"题目内容: {full_question}")
+
+        if question_type == "单选题":
+            ai_answer = ollama(full_question) if modelAi == "ollama" else tongyi(full_question)
+            print(f"AI参考答案: {ai_answer}")
+            for letter in ["A", "B", "C", "D"]:
+                if letter in ai_answer.upper():
+                    try:
+                        question_div.find_element(By.XPATH, f".//span[text()='{letter}']").click()
+                        print(f"已选择选项 {letter}")
+                        break
+                    except: pass
+
+        elif question_type == "多选题":
+            ai_answer = ollama(full_question) if modelAi == "ollama" else tongyi(full_question)
+            print(f"AI参考答案: {ai_answer}")
+            selected = False
+            for letter in ["A", "B", "C", "D", "E", "F"]:
+                if letter in ai_answer.upper():
+                    try:
+                        question_div.find_element(By.XPATH, f".//span[text()='{letter}']").click()
+                        print(f"已选择选项 {letter}")
+                        selected = True
+                        time.sleep(0.2)
+                    except: pass
+            if not selected: print("未在 AI 答案中找到有效选项")
+
+        elif question_type == "判断题":
+            ai_answer = ollama(full_question + "判断题返回对或错") if modelAi == "ollama" else tongyi(full_question + "判断题返回对或错")
+            print(f"AI参考答案: {ai_answer}")
+            if '对' in ai_answer or 'A' in ai_answer.upper() or 'T' in ai_answer.upper():
+                try: question_div.find_element(By.XPATH, ".//span[text()='A']").click(); print("已选择 对 (A)")
+                except: pass
+            elif '错' in ai_answer or 'B' in ai_answer.upper() or 'F' in ai_answer.upper():
+                try: question_div.find_element(By.XPATH, ".//span[text()='B']").click(); print("已选择 错 (B)")
+                except: pass
+
+        elif "填空" in question_type:
+            print("识别为填空题，正在解析...")
+            kong = question_div.find_elements(By.XPATH, ".//div[contains(@class,'Answer')]//iframe | .//div[contains(@class,'Answer')]//input")
+            if not kong:
+                kong = question_div.find_elements(By.XPATH, ".//iframe")
+            
+            kong_num = len(kong)
+            print(f"共检测到 {kong_num} 个填空位置")
+            if kong_num == 0: continue
+
+            img_url_myxuebi = ""
+            try:
+                img = question_div.find_element(By.XPATH, ".//img")
+                print("获取到题目图片，正在处理...")
+                img_url_myxuebi = process_and_upload_image(img)
+            except NoSuchElementException:
+                pass 
+
+            if modelAi == "ollama":
+                print("暂不支持ollama填空，跳过此题")
+                continue
+            else:
+                if img_url_myxuebi:
+                    ans = ty_tiankong_img(full_question, kong_num, img_url_myxuebi)
+                    if ans == "error": continue
+                else:
+                    ans = ty_tiankong(full_question, kong_num)
+
+            ans_list = [a.strip() for a in ans.split("\n") if a.strip()]
+            print("AI参考答案：" + str(ans_list))
+
+            if len(ans_list) >= kong_num:
+                for j in range(kong_num):
+                    try:
+                        input_bar = kong[j]
+                        input_bar.click()
+                        input_bar.send_keys(ans_list[j])
+                        print(f"第 {j+1} 空已填入：{ans_list[j]}")
+                    except Exception as e:
+                        print(f"第 {j+1} 空填入失败: {e}")
+            else:
+                print("错误：AI返回的答案数量与实际空数不符，请手动填写。")
+
+        else:
+            print(f"暂不支持的题型: {question_type}，跳过")
+
+        time.sleep(1) 
+
+    print("\n所有题目处理完毕，正在查找提交按钮...")
+    try:
+        submit_btn = browser.find_element(By.XPATH, "//a[contains(text(),'提交')] | //button[contains(text(),'提交')] | //input[@value='提交']")
+        submit_btn.click()
+        print("已点击提交按钮，请检查页面确认提交。")
+    except NoSuchElementException:
+        print("未找到提交按钮，请手动提交。")
+    
+    print("答题完成，浏览器保持打开，可手动检查。")
+    sys.exit(0)
+
+if homework == 'n':
+    getque()
+else:
+    print("进入作业模式 (一页到底)")
+    extract_question_and_options_homework()
